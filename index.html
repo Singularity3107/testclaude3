@@ -1,76 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>F1 Aero Showroom</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Babel Standalone to compile React code on the fly -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Import Map resolves your unmodified React and Lucide imports in the browser -->
-    <script type="importmap">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Formula 1 Aero &amp; Spec Showroom</title>
+  <meta name="description" content="Interactive F1 aerodynamics & telemetry showroom — wind tunnel simulation, airflow visualization and DRS system demo." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322d3ee' stroke-width='2'%3E%3Cpolygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/%3E%3C/svg%3E" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Babel (in-browser JSX transform for App.jsx) -->
+  <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+
+  <!-- Module resolution: bare imports inside App.jsx map to CDN ESM builds -->
+  <script type="importmap">
     {
-        "imports": {
-            "react": "https://esm.sh/react@18",
-            "react-dom/client": "https://esm.sh/react-dom@18/client",
-            "lucide-react": "https://esm.sh/lucide-react@0.344.0"
-        }
+      "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+        "lucide-react": "https://esm.sh/lucide-react@0.462.0?external=react"
+      }
     }
-    </script>
+  </script>
+
+  <style>
+    html, body { margin: 0; background: #0a0a0a; }
+    #root { min-height: 100vh; }
+
+    .boot-loader {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #64748b;
+      letter-spacing: 0.3em;
+      font-size: 11px;
+    }
+    .boot-ring {
+      width: 52px;
+      height: 52px;
+      border-radius: 9999px;
+      border: 2px solid rgba(34, 211, 238, 0.15);
+      border-top-color: #22d3ee;
+      animation: boot-spin 0.9s linear infinite;
+      box-shadow: 0 0 24px rgba(34, 211, 238, 0.25);
+    }
+    .boot-title {
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.35em;
+      text-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+    }
+    .boot-error {
+      max-width: 640px;
+      padding: 16px 20px;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.08);
+      color: #fca5a5;
+      letter-spacing: normal;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
-<body class="bg-neutral-950">
-    <div id="root"></div>
+<body>
+  <div id="root">
+    <div class="boot-loader" id="boot">
+      <div class="boot-ring"></div>
+      <div class="boot-title">F1 AERO &amp; SPEC SHOWROOM</div>
+      <div>INITIALIZING WIND TUNNEL…</div>
+    </div>
+  </div>
 
-    <script type="module">
-        import React from 'react';
-        import { createRoot } from 'react-dom/client';
+  <script type="module">
+    async function boot() {
+      const bootEl = document.getElementById('boot');
+      try {
+        // 1. Load React runtime via the import map
+        const [React, { createRoot }] = await Promise.all([
+          import('react'),
+          import('react-dom/client'),
+        ]);
 
-        // 1. Fetch your App.jsx file as plain text to avoid strict MIME type checks
-        fetch('./App.jsx')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to find App.jsx. Ensure the file is in the same folder as index.html.');
-                }
-                return response.text();
-            })
-            .then(jsxCode => {
-                // 2. Compile JSX into native JavaScript using Babel
-                const compiledCode = Babel.transform(jsxCode, {
-                    presets: ['react'],
-                    filename: 'App.jsx'
-                }).code;
+        // 2. Fetch the JSX source of the app
+        const res = await fetch('./App.jsx');
+        if (!res.ok) throw new Error(`Could not load ./App.jsx (HTTP ${res.status})`);
+        const source = await res.text();
 
-                // 3. Convert the compiled JS to a Blob with an approved MIME type
-                const blob = new Blob([compiledCode], { type: 'application/javascript' });
-                const blobUrl = URL.createObjectURL(blob);
+        // 3. Transform JSX -> JS in the browser (ESM imports preserved)
+        const { code } = Babel.transform(source, {
+          presets: [['react', { runtime: 'classic' }]],
+          filename: 'App.jsx',
+        });
 
-                // 4. Dynamically import the compiled module and render it
-                import(blobUrl)
-                    .then(module => {
-                        const root = createRoot(document.getElementById('root'));
-                        // Render the default exported component (Formula1AeroShowroom)
-                        root.render(React.createElement(module.default));
-                    })
-                    .catch(err => {
-                        console.error('Error importing compiled module:', err);
-                        showError('Error executing the compiled React component. Check the browser console.');
-                    });
-            })
-            .catch(err => {
-                console.error(err);
-                showError('Could not load App.jsx. Ensure App.jsx is present in your repository alongside index.html.');
-            });
+        // 4. Execute the transformed module and mount the app
+        const moduleUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+        const { default: App } = await import(moduleUrl);
+        URL.revokeObjectURL(moduleUrl);
 
-        function showError(msg) {
-            document.getElementById('root').innerHTML = `
-                <div style="color: #ef4444; padding: 20px; font-family: monospace; text-align: center; margin-top: 50px;">
-                    <p style="font-weight: bold; font-size: 18px;">Application Loader Error</p>
-                    <p>${msg}</p>
-                </div>
-            `;
+        createRoot(document.getElementById('root')).render(
+          React.createElement(React.StrictMode, null, React.createElement(App))
+        );
+      } catch (err) {
+        console.error('[F1 Aero Showroom] Boot failure:', err);
+        if (bootEl) {
+          bootEl.innerHTML =
+            '<div class="boot-title" style="color:#f87171;text-shadow:0 0 12px rgba(239,68,68,.5)">BOOT FAILURE</div>' +
+            '<div class="boot-error">' + String(err && err.message ? err.message : err) +
+            '\n\nCheck that App.jsx sits next to index.html and that CDN access is available.</div>';
         }
-    </script>
+      }
+    }
+
+    boot();
+  </script>
 </body>
 </html>
