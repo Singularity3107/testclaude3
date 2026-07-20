@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18';
-import { createRoot } from 'https://esm.sh/react-dom@18/client';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Gauge, ChevronsDown, Wind, Timer, Activity, Layers, Power, Radio,
   ScanLine, MoveHorizontal, Thermometer, Zap, Crosshair, CircleDot
-} from 'https://esm.sh/lucide-react';
-
-/* ... the rest of your code stays exactly the same ... */
+} from 'lucide-react';
 
 /* ---------------------------------- DATA ---------------------------------- */
 const PARTS = {
