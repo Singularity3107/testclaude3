@@ -1,1029 +1,729 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Formula 1 Aero &amp; Spec Showroom</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Titillium+Web:ital,wght@0,300;0,400;0,600;0,700;0,900;1,600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --flow-dur: 3.2s;
-    --flow-dur-fast: 1.6s;
-    --accent: #ff1531;
-    --accent-dim: #7a0012;
-    --cyan: #28f4ff;
-    --gold: #e9c05f;
-  }
-  *{ box-sizing:border-box; }
-  html,body{ background:#07070a; }
-  body{
-    font-family:'Titillium Web', sans-serif;
-    color:#e8e9ee;
-    overflow-x:hidden;
-    position:relative;
-  }
-  .font-display{ font-family:'Orbitron', sans-serif; }
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Gauge, ChevronsDown, Wind, Timer, Activity, Layers, Power, Radio,
+  ScanLine, MoveHorizontal, Thermometer, Zap, Crosshair, CircleDot
+} from 'lucide-react';
 
-  /* ---------- Background texture ---------- */
-  .bg-layer{
-    position:fixed; inset:0; z-index:0; pointer-events:none;
-  }
-  .bg-carbon{
-    background-image:
-      repeating-linear-gradient(45deg, #0d0e13 0 2px, #0a0b0f 2px 4px),
-      repeating-linear-gradient(-45deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 4px);
-    opacity:0.9;
-  }
-  .bg-vignette{
-    background: radial-gradient(ellipse at 50% 0%, rgba(255,21,49,0.10), transparent 45%),
-                radial-gradient(ellipse at 80% 100%, rgba(40,244,255,0.07), transparent 50%),
-                radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.75) 100%);
-  }
-  .bg-grid{
-    background-image: linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
-                       linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse at 50% 20%, black, transparent 75%);
-    animation: gridDrift 30s linear infinite;
-  }
-  @keyframes gridDrift{
-    0%{ background-position: 0 0, 0 0; }
-    100%{ background-position: 44px 88px, 44px 88px; }
-  }
-  .spotlight{
-    position:fixed; inset:0; z-index:1; pointer-events:none;
-    background: radial-gradient(circle 420px at var(--mx,50%) var(--my,20%), rgba(255,255,255,0.05), transparent 60%);
-    transition: background 0.15s ease-out;
-  }
-
-  /* ---------- Glass panels ---------- */
-  .panel{
-    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px;
-    backdrop-filter: blur(14px);
-    box-shadow: 0 20px 50px -20px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06);
-  }
-
-  .chip{
-    border:1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.04);
-    border-radius:999px;
-  }
-
-  /* ---------- Header accents ---------- */
-  .brand-bar{
-    background: linear-gradient(90deg, var(--accent), #ff5c3c 40%, var(--gold) 70%, var(--cyan));
-    height:3px; border-radius:3px;
-  }
-  .title-glow{
-    text-shadow: 0 0 30px rgba(255,21,49,0.35);
-  }
-
-  /* ---------- SVG Car & Animations ---------- */
-  #f1svg{ display:block; width:100%; height:auto; overflow:visible; }
-
-  .car-float{ animation: carFloat 4.5s ease-in-out infinite; transform-box: fill-box; transform-origin:center; }
-  @keyframes carFloat{
-    0%,100%{ transform: translateY(0px); }
-    50%{ transform: translateY(-5px); }
-  }
-  .engine-on .car-float{ animation-duration: 0.9s; }
-
-  .ambient-path{
-    fill:none; stroke:rgba(40,244,255,0.16); stroke-width:1.4;
-    stroke-dasharray: 4 10;
-    animation: dashFlow var(--flow-dur) linear infinite;
-  }
-  .flow-path{
-    fill:none; stroke:url(#flowGrad); stroke-width:2.4; stroke-linecap:round;
-    stroke-dasharray: 10 9;
-    filter:url(#glow);
-    animation: dashFlow var(--flow-dur) linear infinite;
-  }
-  .flow-path.thin{ stroke-width:1.6; opacity:0.85; }
-  @keyframes dashFlow{ to{ stroke-dashoffset:-380; } }
-
-  .flow-particle{ filter:url(#glow); }
-
-  .flow-group{ opacity:0; transition: opacity 0.55s ease; }
-  .flow-group.active{ opacity:1; }
-
-  #flow-rearwing .rw-open{ display:none; }
-  #flow-rearwing .rw-closed{ display:block; }
-  #f1svg.drs-open #flow-rearwing .rw-open{ display:block; }
-  #f1svg.drs-open #flow-rearwing .rw-closed{ display:none; }
-
-  #drsFlap{
-    transition: transform 0.5s cubic-bezier(.2,.8,.2,1);
-    transform-box: fill-box; transform-origin: 100% 50%;
-  }
-  #f1svg.drs-open #drsFlap{ transform: rotate(-26deg) translate(1px,-4px); }
-
-  .hotspot{ cursor:pointer; outline:none; }
-  .hs-hit{ fill:transparent; }
-  .hs-dot{ fill:var(--gold); stroke:#fff2; stroke-width:1; transition: fill .3s ease, filter .3s ease; }
-  .hs-ring{
-    fill:none; stroke: var(--gold); stroke-width:2; opacity:0;
-    transform-box: fill-box; transform-origin:center;
-    animation: pulseRing 2.6s ease-out infinite;
-  }
-  .hotspot:nth-child(2) .hs-ring{ animation-delay: .5s; }
-  @keyframes pulseRing{
-    0%{ transform:scale(0.55); opacity:.9; }
-    75%{ opacity:0; }
-    100%{ transform:scale(2.3); opacity:0; }
-  }
-  .hs-label rect{ fill:rgba(8,9,13,0.85); stroke:rgba(255,255,255,0.15); }
-  .hs-label text{ fill:#dfe3ea; font-size:15px; font-weight:700; letter-spacing:0.6px; font-family:'Titillium Web',sans-serif; }
-  .hs-leader{ stroke:rgba(233,192,95,0.55); stroke-width:1.5; stroke-dasharray:3 3; }
-
-  .hotspot.is-active .hs-dot{ fill:var(--accent); filter: drop-shadow(0 0 8px var(--accent)); }
-  .hotspot.is-active .hs-ring{ stroke:var(--accent); }
-  .hotspot.is-active .hs-label rect{ fill:rgba(255,21,49,0.18); stroke:var(--accent); }
-  .hotspot.is-active .hs-label text{ fill:#fff; }
-  .hotspot.is-active .hs-leader{ stroke:var(--accent); }
-
-  .hotspot:focus-visible .hs-dot{ filter: drop-shadow(0 0 10px #fff); }
-
-  @media (max-width: 820px){
-    .hs-label, .hs-leader{ display:none; }
-    .hs-dot{ r:9; }
-  }
-
-  /* ---------- Detail panel ---------- */
-  .fade-swap{ animation: fadeSwap .45s ease; }
-  @keyframes fadeSwap{
-    from{ opacity:0; transform: translateY(6px); }
-    to{ opacity:1; transform:translateY(0); }
-  }
-
-  .tab-pill{
-    border:1px solid rgba(255,255,255,0.1);
-    background:rgba(255,255,255,0.03);
-    transition: all .25s ease;
-    white-space:nowrap;
-  }
-  .tab-pill.active{
-    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-    border-color: var(--accent);
-    color:#fff;
-    box-shadow: 0 6px 18px -6px rgba(255,21,49,0.6);
-  }
-  .tab-pill:hover:not(.active){ border-color:rgba(255,255,255,0.3); }
-
-  .bar-track{ background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; height:8px; }
-  .bar-fill{ height:100%; border-radius:999px; transition: width 1s cubic-bezier(.2,.8,.2,1); }
-
-  .stat-num{ font-variant-numeric: tabular-nums; }
-
-  /* ---------- Sliders / toggles ---------- */
-  input[type=range]{
-    -webkit-appearance:none; appearance:none;
-    width:100%; height:6px; border-radius:999px;
-    background: linear-gradient(90deg, var(--cyan), var(--accent));
-    outline:none;
-  }
-  input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none; appearance:none;
-    width:20px; height:20px; border-radius:50%;
-    background:#fff;
-    border:3px solid var(--accent);
-    box-shadow:0 0 12px rgba(255,21,49,0.7);
-    cursor:pointer;
-    margin-top:-7px;
-  }
-  input[type=range]::-moz-range-thumb{
-    width:20px; height:20px; border-radius:50%;
-    background:#fff; border:3px solid var(--accent);
-    box-shadow:0 0 12px rgba(255,21,49,0.7); cursor:pointer;
-  }
-
-  .switch{
-    width:56px; height:30px; border-radius:999px;
-    background:rgba(255,255,255,0.08);
-    border:1px solid rgba(255,255,255,0.15);
-    position:relative; cursor:pointer; transition: background .3s ease;
-    flex-shrink:0;
-  }
-  .switch .knob{
-    position:absolute; top:2px; left:2px;
-    width:24px; height:24px; border-radius:50%;
-    background:#fff; transition: transform .3s cubic-bezier(.2,.8,.2,1), background .3s ease;
-    box-shadow:0 2px 6px rgba(0,0,0,0.4);
-  }
-  .switch.on{ background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-color:var(--accent); }
-  .switch.on .knob{ transform: translateX(26px); background:#fff; }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar{ height:6px; width:6px; }
-  ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.2); border-radius:99px; }
-
-  .legend-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
-
-  .sticky-panel{ position:sticky; top:1.5rem; }
-
-  .divider{ border-color: rgba(255,255,255,0.08); }
-
-  /* =====================================================================
-     Minimal self-contained utility layer (Tailwind-style class names)
-     so this file has ZERO external script dependencies.
-     ===================================================================== */
-  .flex{ display:flex; }
-  .grid{ display:grid; }
-  .block{ display:block; }
-  .flex-col{ flex-direction:column; }
-  .flex-wrap{ flex-wrap:wrap; }
-  .items-center{ align-items:center; }
-  .items-start{ align-items:flex-start; }
-  .justify-between{ justify-content:space-between; }
-  .justify-center{ justify-content:center; }
-  .relative{ position:relative; }
-  .grid-cols-1{ grid-template-columns:repeat(1,minmax(0,1fr)); }
-  .grid-cols-2{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .gap-1\.5{ gap:.375rem; }
-  .gap-2{ gap:.5rem; }
-  .gap-3{ gap:.75rem; }
-  .gap-4{ gap:1rem; }
-  .gap-5{ gap:1.25rem; }
-  .gap-6{ gap:1.5rem; }
-  .mb-1{ margin-bottom:.25rem; }
-  .mb-2{ margin-bottom:.5rem; }
-  .mb-3{ margin-bottom:.75rem; }
-  .mb-4{ margin-bottom:1rem; }
-  .mt-1{ margin-top:.25rem; }
-  .mt-2{ margin-top:.5rem; }
-  .mt-4{ margin-top:1rem; }
-  .mt-8{ margin-top:2rem; }
-  .mt-10{ margin-top:2.5rem; }
-  .mx-auto{ margin-left:auto; margin-right:auto; }
-  .pt-2{ padding-top:.5rem; }
-  .pt-4{ padding-top:1rem; }
-  .pb-1{ padding-bottom:.25rem; }
-  .pb-4{ padding-bottom:1rem; }
-  .p-3{ padding:.75rem; }
-  .p-4{ padding:1rem; }
-  .p-5{ padding:1.25rem; }
-  .px-3{ padding-left:.75rem; padding-right:.75rem; }
-  .px-4{ padding-left:1rem; padding-right:1rem; }
-  .py-1\.5{ padding-top:.375rem; padding-bottom:.375rem; }
-  .py-2{ padding-top:.5rem; padding-bottom:.5rem; }
-  .py-8{ padding-top:2rem; padding-bottom:2rem; }
-  .py-16{ padding-top:4rem; padding-bottom:4rem; }
-  .w-11{ width:2.75rem; }
-  .h-11{ height:2.75rem; }
-  .w-full{ width:100%; }
-  .h-full{ height:100%; }
-  .h-fit{ height:fit-content; }
-  .min-h-screen{ min-height:100vh; }
-  .min-h-\[420px\]{ min-height:420px; }
-  .max-w-\[1440px\]{ max-width:1440px; }
-  .max-w-md{ max-width:28rem; }
-  .max-w-xl{ max-width:36rem; }
-  .max-w-xs{ max-width:20rem; }
-  .z-10{ position:relative; z-index:10; }
-  .rounded-full{ border-radius:9999px; }
-  .rounded-xl{ border-radius:.75rem; }
-  .\!rounded-xl{ border-radius:.75rem !important; }
-  .text-xs{ font-size:.75rem; line-height:1.15rem; }
-  .text-sm{ font-size:.875rem; line-height:1.35rem; }
-  .text-lg{ font-size:1.125rem; line-height:1.5rem; }
-  .text-xl{ font-size:1.25rem; line-height:1.65rem; }
-  .text-3xl{ font-size:1.875rem; line-height:2.2rem; }
-  .text-4xl{ font-size:2.25rem; line-height:2.5rem; }
-  .text-\[10px\]{ font-size:10px; }
-  .text-\[11px\]{ font-size:11px; }
-  .uppercase{ text-transform:uppercase; }
-  .text-center{ text-align:center; }
-  .text-right{ text-align:right; }
-  .tracking-tight{ letter-spacing:-0.02em; }
-  .tracking-wide{ letter-spacing:0.04em; }
-  .tracking-wider{ letter-spacing:0.06em; }
-  .tracking-\[0\.35em\]{ letter-spacing:0.35em; }
-  .leading-none{ line-height:1; }
-  .leading-tight{ line-height:1.2; }
-  .leading-relaxed{ line-height:1.65; }
-  .font-bold{ font-weight:700; }
-  .font-semibold{ font-weight:600; }
-  .font-700{ font-weight:700; }
-  .font-900{ font-weight:900; }
-  .border-b{ border-bottom-width:1px; border-bottom-style:solid; }
-  .border-t{ border-top-width:1px; border-top-style:solid; }
-  .overflow-x-auto{ overflow-x:auto; }
-  .shadow-lg{ box-shadow:0 12px 28px -8px rgba(0,0,0,.55); }
-  .shadow-red-900\/40{ box-shadow:0 10px 26px -6px rgba(122,0,18,.4); }
-  .bg-gradient-to-br{ background-image:linear-gradient(135deg, var(--tw-from), var(--tw-to)); }
-  .from-\[var\(--accent\)\]{ --tw-from: var(--accent); }
-  .to-\[var\(--accent-dim\)\]{ --tw-to: var(--accent-dim); }
-  .text-white\/25{ color:rgba(255,255,255,.25); }
-  .text-white\/30{ color:rgba(255,255,255,.30); }
-  .text-white\/40{ color:rgba(255,255,255,.40); }
-  .text-white\/50{ color:rgba(255,255,255,.50); }
-  .text-white\/60{ color:rgba(255,255,255,.60); }
-  .text-white\/70{ color:rgba(255,255,255,.70); }
-  .text-white\/90{ color:rgba(255,255,255,.90); }
-  .text-\[var\(--accent\)\]{ color:var(--accent); }
-  .text-\[var\(--cyan\)\]{ color:var(--cyan); }
-  .text-\[var\(--gold\)\]{ color:var(--gold); }
-
-  @media (min-width:640px){
-    .sm\:flex-row{ flex-direction:row; }
-    .sm\:items-end{ align-items:flex-end; }
-    .sm\:justify-between{ justify-content:space-between; }
-    .sm\:p-6{ padding:1.5rem; }
-    .sm\:px-6{ padding-left:1.5rem; padding-right:1.5rem; }
-    .sm\:text-2xl{ font-size:1.5rem; line-height:1.9rem; }
-    .sm\:text-4xl{ font-size:2.25rem; line-height:2.5rem; }
-    .sm\:text-base{ font-size:1rem; line-height:1.6rem; }
-  }
-  @media (min-width:768px){
-    .md\:grid-cols-2{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .md\:grid-cols-4{ grid-template-columns:repeat(4,minmax(0,1fr)); }
-  }
-  @media (min-width:1024px){
-    .lg\:grid-cols-\[minmax\(0\,1fr\)_400px\]{ grid-template-columns:minmax(0,1fr) 400px; }
-    .lg\:px-10{ padding-left:2.5rem; padding-right:2.5rem; }
-    .lg\:text-5xl{ font-size:3rem; line-height:3.2rem; }
-  }
-</style>
-</head>
-<body class="min-h-screen">
-
-<div class="bg-layer bg-carbon"></div>
-<div class="bg-layer bg-grid"></div>
-<div class="bg-layer bg-vignette"></div>
-<div class="spotlight" id="spotlight"></div>
-
-<div class="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-8">
-
-  <!-- HEADER -->
-  <header class="flex flex-col gap-5">
-    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-3 mb-2">
-          <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-dim)] flex items-center justify-center font-display font-900 text-lg shadow-lg shadow-red-900/40">F1</div>
-          <span class="uppercase tracking-[0.35em] text-xs text-white/50 font-semibold">Engineering Showroom</span>
-        </div>
-        <h1 class="font-display font-900 text-3xl sm:text-4xl lg:text-5xl uppercase tracking-tight title-glow leading-tight">
-          Aero &amp; Spec <span class="text-[var(--accent)]">Showroom</span>
-        </h1>
-        <p class="text-white/60 mt-2 max-w-xl text-sm sm:text-base">
-          Explore the aerodynamic anatomy of a modern ground-effect Formula 1 challenger. Select a hotspot to reveal how each surface bends the air.
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-2 max-w-md">
-        <span class="chip px-3 py-1.5 text-xs font-semibold text-white/70">⚙ 1.6L V6 Turbo-Hybrid · 1000+ HP</span>
-        <span class="chip px-3 py-1.5 text-xs font-semibold text-white/70">⚖ 798 kg Min. Weight</span>
-        <span class="chip px-3 py-1.5 text-xs font-semibold text-white/70">⏱ 0–100 km/h ≈ 2.6s</span>
-        <span class="chip px-3 py-1.5 text-xs font-semibold text-white/70">🏁 350+ km/h Top Speed</span>
-      </div>
-    </div>
-    <div class="brand-bar w-full"></div>
-  </header>
-
-  <!-- MAIN GRID -->
-  <main class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-6 mt-8">
-
-    <!-- LEFT: Car showroom -->
-    <section class="panel p-4 sm:p-6 flex flex-col gap-5">
-      <div class="flex items-center justify-between flex-wrap gap-3">
-        <div class="flex items-center gap-4 text-xs text-white/60 font-semibold uppercase tracking-wider">
-          <span class="flex items-center gap-1.5"><span class="legend-dot" style="background:var(--gold)"></span>Hotspot</span>
-          <span class="flex items-center gap-1.5"><span class="legend-dot" style="background:var(--cyan)"></span>Airflow</span>
-          <span class="flex items-center gap-1.5"><span class="legend-dot" style="background:var(--accent)"></span>DRS / Selected</span>
-        </div>
-        <button id="resetBtn" class="tab-pill px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide text-white/70">↺ Reset View</button>
-      </div>
-
-      <!-- SVG CAR -->
-      <div class="relative">
-        <svg id="f1svg" viewBox="0 0 1200 420" xmlns="http://www.w3.org/2000/svg" aria-label="Interactive side profile of a Formula 1 car">
-          <defs>
-            <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#ff2c46"/>
-              <stop offset="55%" stop-color="#b1001c"/>
-              <stop offset="100%" stop-color="#3d0009"/>
-            </linearGradient>
-            <linearGradient id="darkGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#2a2c34"/>
-              <stop offset="100%" stop-color="#0a0a0d"/>
-            </linearGradient>
-            <linearGradient id="carbonGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#1c1d24"/>
-              <stop offset="100%" stop-color="#08080b"/>
-            </linearGradient>
-            <linearGradient id="metalGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#f2f3f5"/>
-              <stop offset="100%" stop-color="#9a9ea6"/>
-            </linearGradient>
-            <radialGradient id="tireGrad" cx="35%" cy="30%" r="75%">
-              <stop offset="0%" stop-color="#3a3a3d"/>
-              <stop offset="100%" stop-color="#0c0c0d"/>
-            </radialGradient>
-            <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#28f4ff" stop-opacity="0"/>
-              <stop offset="50%" stop-color="#28f4ff" stop-opacity="1"/>
-              <stop offset="100%" stop-color="#7afcff" stop-opacity="0.2"/>
-            </linearGradient>
-            <radialGradient id="particleGrad" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#e8feff"/>
-              <stop offset="100%" stop-color="#28f4ff"/>
-            </radialGradient>
-            <radialGradient id="shadowGrad" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="rgba(0,0,0,0.55)"/>
-              <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-            </radialGradient>
-            <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="2.6" result="blur"/>
-              <feMerge>
-                <feMergeNode in="blur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
-          </defs>
-
-          <!-- Ground shadow -->
-          <ellipse cx="600" cy="372" rx="540" ry="16" fill="url(#shadowGrad)"/>
-
-          <!-- Ambient always-on streamlines -->
-          <g id="ambientFlow">
-            <path class="ambient-path" d="M-20,110 C200,102 550,96 1220,92"/>
-            <path class="ambient-path" d="M-20,332 C250,338 600,338 1220,322" style="animation-delay:-1s"/>
-            <path class="ambient-path" d="M-20,238 C260,222 620,222 1220,214" style="animation-delay:-2s"/>
-          </g>
-
-          <!-- CAR -->
-          <g id="carGroup" class="car-float">
-
-            <!-- Floor & Diffuser -->
-            <g id="floorGroup">
-              <rect x="300" y="284" width="545" height="14" fill="url(#carbonGrad)" stroke="#000" stroke-width="1"/>
-              <line x1="300" y1="284.5" x2="845" y2="284.5" stroke="#4a4e58" stroke-width="1.5" opacity="0.8"/>
-              <path d="M788,284 L882,284 L900,228 L840,244 L788,266 Z" fill="url(#darkGrad)" stroke="#000" stroke-width="1"/>
-              <path d="M835,238 L845,281" stroke="#000" stroke-width="2" opacity="0.5"/>
-              <path d="M853,234 L861,282" stroke="#000" stroke-width="2" opacity="0.5"/>
-              <path d="M871,230 L876,283" stroke="#000" stroke-width="2" opacity="0.5"/>
-            </g>
-
-            <!-- Rear wheel -->
-            <g id="rearWheel">
-              <circle cx="945" cy="306" r="58" fill="url(#tireGrad)"/>
-              <circle cx="945" cy="306" r="57" fill="none" stroke="#000" stroke-width="3"/>
-              <circle cx="945" cy="306" r="49" fill="none" stroke="#38383b" stroke-width="1.5" stroke-dasharray="2.5 5.5"/>
-              <circle cx="945" cy="306" r="32" fill="url(#metalGrad)" opacity="0.9"/>
-              <circle cx="945" cy="306" r="11" fill="#111"/>
-              <g stroke="#6b6f76" stroke-width="3">
-                <line x1="945" y1="306" x2="945" y2="279"/>
-                <line x1="945" y1="306" x2="969" y2="320"/>
-                <line x1="945" y1="306" x2="921" y2="320"/>
-              </g>
-            </g>
-
-            <!-- Front wheel -->
-            <g id="frontWheel">
-              <circle cx="235" cy="306" r="58" fill="url(#tireGrad)"/>
-              <circle cx="235" cy="306" r="57" fill="none" stroke="#000" stroke-width="3"/>
-              <circle cx="235" cy="306" r="49" fill="none" stroke="#38383b" stroke-width="1.5" stroke-dasharray="2.5 5.5"/>
-              <circle cx="235" cy="306" r="32" fill="url(#metalGrad)" opacity="0.9"/>
-              <circle cx="235" cy="306" r="11" fill="#111"/>
-              <g stroke="#6b6f76" stroke-width="3">
-                <line x1="235" y1="306" x2="235" y2="279"/>
-                <line x1="235" y1="306" x2="259" y2="320"/>
-                <line x1="235" y1="306" x2="211" y2="320"/>
-              </g>
-            </g>
-
-            <!-- Full body silhouette: nose + cockpit surround + sidepod + engine cover (single path, seamless) -->
-            <path d="M52,301 C120,289 220,249 320,221 C370,207 400,195 420,187
-                     C450,174 470,158 500,150 C560,158 620,168 680,182
-                     C740,198 792,212 830,226 L845,232
-                     L845,284 L420,284
-                     C370,284 300,286 220,292 C150,297 95,300 58,308 Z"
-                  fill="url(#bodyGrad)" stroke="#000" stroke-width="1.2"/>
-
-            <!-- sidepod intake -->
-            <ellipse cx="628" cy="196" rx="19" ry="10" transform="rotate(-10 628 196)" fill="#050505" opacity="0.92"/>
-            <ellipse cx="628" cy="196" rx="19" ry="10" transform="rotate(-10 628 196)" fill="none" stroke="#000" opacity="0.6"/>
-            <!-- shark fin -->
-            <path d="M700,192 C708,164 718,140 730,128 L738,130 C726,150 718,174 712,195 Z" fill="url(#darkGrad)" stroke="#000" stroke-width="1"/>
-
-            <!-- Cockpit opening + Halo -->
-            <ellipse cx="452" cy="180" rx="27" ry="14" fill="#050505"/>
-            <path d="M427,183 C432,150 452,122 472,116 C492,122 508,148 500,168" fill="none" stroke="url(#metalGrad)" stroke-width="7" stroke-linecap="round"/>
-            <line x1="450" y1="146" x2="437" y2="181" stroke="url(#metalGrad)" stroke-width="6" stroke-linecap="round"/>
-            <line x1="494" y1="150" x2="500" y2="169" stroke="url(#metalGrad)" stroke-width="6" stroke-linecap="round"/>
-
-            <!-- Front wing (attached under the nose tip) -->
-            <g id="frontWingGroup">
-              <rect x="34" y="298" width="200" height="11" rx="3" fill="url(#darkGrad)" stroke="#000"/>
-              <rect x="46" y="286" width="176" height="4.5" rx="2" fill="#1c1d24"/>
-              <rect x="58" y="278" width="152" height="4.5" rx="2" fill="#1c1d24"/>
-              <rect x="30" y="268" width="7" height="46" fill="url(#bodyGrad)" stroke="#000" stroke-width="1"/>
-            </g>
-
-            <!-- Rear wing -->
-            <g id="rearWingGroup">
-              <line x1="800" y1="213" x2="893" y2="176" stroke="#333" stroke-width="5"/>
-              <line x1="828" y1="227" x2="885" y2="150" stroke="#333" stroke-width="5"/>
-              <rect x="878" y="176" width="112" height="7" rx="2" fill="url(#darkGrad)" stroke="#000"/>
-              <rect x="884" y="94" width="7" height="96" fill="url(#darkGrad)" stroke="#000"/>
-              <rect x="981" y="94" width="7" height="96" fill="url(#darkGrad)" stroke="#000"/>
-              <rect x="889" y="140" width="92" height="8" rx="2" fill="url(#bodyGrad)" stroke="#000"/>
-              <g id="drsFlap">
-                <rect x="892" y="110" width="88" height="11" rx="2" fill="url(#bodyGrad)" stroke="#000" stroke-width="1"/>
-              </g>
-            </g>
-          </g>
-
-          <!-- FLOW LAYER -->
-          <g id="flowLayer">
-            <g class="flow-group" id="flow-frontwing">
-              <path id="p-fw-1" class="flow-path" d="M-20,302 C60,299 140,304 240,301 C300,299 350,296 405,290"/>
-              <path id="p-fw-2" class="flow-path thin" d="M-20,268 C90,246 210,213 320,193 C365,183 395,173 425,163"/>
-              <circle class="flow-particle" r="3" fill="url(#particleGrad)"><animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#p-fw-1"/></animateMotion></circle>
-              <circle class="flow-particle" r="2.4" fill="url(#particleGrad)"><animateMotion dur="2.2s" begin="0.8s" repeatCount="indefinite"><mpath href="#p-fw-1"/></animateMotion></circle>
-              <circle class="flow-particle" r="3" fill="url(#particleGrad)"><animateMotion dur="2.6s" repeatCount="indefinite"><mpath href="#p-fw-2"/></animateMotion></circle>
-            </g>
-
-            <g class="flow-group" id="flow-halo">
-              <path id="p-halo-1" class="flow-path" d="M395,163 C425,132 455,110 485,110 C515,110 542,126 568,150"/>
-              <path id="p-halo-2" class="flow-path thin" d="M410,192 C438,175 462,163 490,158 C518,153 545,158 570,170"/>
-              <circle class="flow-particle" r="3" fill="url(#particleGrad)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#p-halo-1"/></animateMotion></circle>
-              <circle class="flow-particle" r="2.4" fill="url(#particleGrad)"><animateMotion dur="2.4s" begin="1s" repeatCount="indefinite"><mpath href="#p-halo-2"/></animateMotion></circle>
-            </g>
-
-            <g class="flow-group" id="flow-sidepod">
-              <path id="p-sp-1" class="flow-path" d="M500,150 C560,150 618,159 676,176 C716,188 758,202 798,215"/>
-              <path id="p-sp-2" class="flow-path thin" d="M470,242 C545,264 630,278 720,282 C775,284 812,284 845,284"/>
-              <circle class="flow-particle" r="3" fill="url(#particleGrad)"><animateMotion dur="2.4s" repeatCount="indefinite"><mpath href="#p-sp-1"/></animateMotion></circle>
-              <circle class="flow-particle" r="2.6" fill="url(#particleGrad)"><animateMotion dur="2.8s" begin="1.2s" repeatCount="indefinite"><mpath href="#p-sp-2"/></animateMotion></circle>
-            </g>
-
-            <g class="flow-group" id="flow-floor">
-              <path id="p-fl-1" class="flow-path" d="M260,300 C400,300 560,300 710,296 C765,294 805,286 832,270 C848,260 866,244 888,224"/>
-              <path id="p-fl-2" class="flow-path thin" d="M280,312 C440,315 610,315 790,309 C812,307 828,300 840,292"/>
-              <circle class="flow-particle" r="3" fill="url(#particleGrad)"><animateMotion dur="2.6s" repeatCount="indefinite"><mpath href="#p-fl-1"/></animateMotion></circle>
-              <circle class="flow-particle" r="2.4" fill="url(#particleGrad)"><animateMotion dur="3s" begin="1.4s" repeatCount="indefinite"><mpath href="#p-fl-2"/></animateMotion></circle>
-            </g>
-
-            <g class="flow-group" id="flow-rearwing">
-              <path id="p-rw-1" class="flow-path" d="M792,208 C845,180 895,145 935,120 C958,106 980,100 1010,105"/>
-              <g class="rw-closed">
-                <path id="p-rw-closed" class="flow-path thin" d="M1016,110 C1036,126 1024,146 1042,160 C1060,174 1044,192 1060,206"/>
-              </g>
-              <g class="rw-open">
-                <path id="p-rw-open" class="flow-path thin" d="M1016,116 C1052,119 1088,126 1128,136"/>
-              </g>
-              <circle class="flow-particle" r="3" fill="url(#particleGrad)"><animateMotion dur="2.1s" repeatCount="indefinite"><mpath href="#p-rw-1"/></animateMotion></circle>
-            </g>
-          </g>
-
-          <!-- HOTSPOTS -->
-          <g id="hotspots">
-            <g class="hotspot" id="hs-frontwing" tabindex="0" role="button" aria-label="Front Wing hotspot" onclick="selectHotspot('frontwing')" onkeydown="hsKey(event,'frontwing')">
-              <circle class="hs-hit" cx="134" cy="303" r="26"/>
-              <line class="hs-leader" x1="134" y1="295" x2="134" y2="240"/>
-              <circle class="hs-ring" cx="134" cy="303" r="10"/>
-              <circle class="hs-dot" cx="134" cy="303" r="7"/>
-              <g class="hs-label" transform="translate(134,226)">
-                <rect x="-58" y="-15" width="116" height="26" rx="13"/>
-                <text x="0" y="4" text-anchor="middle">FRONT WING</text>
-              </g>
-            </g>
-
-            <g class="hotspot" id="hs-halo" tabindex="0" role="button" aria-label="Halo and cockpit hotspot" onclick="selectHotspot('halo')" onkeydown="hsKey(event,'halo')">
-              <circle class="hs-hit" cx="472" cy="118" r="26"/>
-              <line class="hs-leader" x1="472" y1="110" x2="472" y2="72"/>
-              <circle class="hs-ring" cx="472" cy="118" r="10"/>
-              <circle class="hs-dot" cx="472" cy="118" r="7"/>
-              <g class="hs-label" transform="translate(472,58)">
-                <rect x="-70" y="-15" width="140" height="26" rx="13"/>
-                <text x="0" y="4" text-anchor="middle">HALO &amp; COCKPIT</text>
-              </g>
-            </g>
-
-            <g class="hotspot" id="hs-sidepod" tabindex="0" role="button" aria-label="Sidepod hotspot" onclick="selectHotspot('sidepod')" onkeydown="hsKey(event,'sidepod')">
-              <circle class="hs-hit" cx="628" cy="196" r="26"/>
-              <line class="hs-leader" x1="628" y1="182" x2="628" y2="134"/>
-              <circle class="hs-ring" cx="628" cy="196" r="10"/>
-              <circle class="hs-dot" cx="628" cy="196" r="7"/>
-              <g class="hs-label" transform="translate(628,120)">
-                <rect x="-52" y="-15" width="104" height="26" rx="13"/>
-                <text x="0" y="4" text-anchor="middle">SIDEPODS</text>
-              </g>
-            </g>
-
-            <g class="hotspot" id="hs-floor" tabindex="0" role="button" aria-label="Floor and diffuser hotspot" onclick="selectHotspot('floor')" onkeydown="hsKey(event,'floor')">
-              <circle class="hs-hit" cx="845" cy="250" r="26"/>
-              <line class="hs-leader" x1="845" y1="262" x2="845" y2="332"/>
-              <circle class="hs-ring" cx="845" cy="250" r="10"/>
-              <circle class="hs-dot" cx="845" cy="250" r="7"/>
-              <g class="hs-label" transform="translate(845,346)">
-                <rect x="-84" y="-15" width="168" height="26" rx="13"/>
-                <text x="0" y="4" text-anchor="middle">FLOOR &amp; DIFFUSER</text>
-              </g>
-            </g>
-
-            <g class="hotspot" id="hs-rearwing" tabindex="0" role="button" aria-label="Rear wing and DRS hotspot" onclick="selectHotspot('rearwing')" onkeydown="hsKey(event,'rearwing')">
-              <circle class="hs-hit" cx="934" cy="106" r="26"/>
-              <line class="hs-leader" x1="934" y1="94" x2="934" y2="58"/>
-              <circle class="hs-ring" cx="934" cy="106" r="10"/>
-              <circle class="hs-dot" cx="934" cy="106" r="7"/>
-              <g class="hs-label" transform="translate(934,44)">
-                <rect x="-78" y="-15" width="156" height="26" rx="13"/>
-                <text x="0" y="4" text-anchor="middle">REAR WING / DRS</text>
-              </g>
-            </g>
-          </g>
-        </svg>
-      </div>
-
-      <!-- CONTROLS: Wind Tunnel + DRS + Engine Audio -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t divider">
-        <div class="pt-4">
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-xs font-bold uppercase tracking-wider text-white/60">💨 Wind Tunnel Speed</label>
-            <span class="font-display font-700 text-[var(--cyan)] text-lg stat-num"><span id="speedVal">180</span> km/h</span>
-          </div>
-          <input type="range" id="speedSlider" min="40" max="350" value="180" step="1">
-          <div class="flex justify-between text-[10px] text-white/40 mt-1 uppercase tracking-wide">
-            <span>Pit lane</span><span>V-max</span>
-          </div>
-        </div>
-
-        <div class="pt-4 flex flex-col gap-3">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-xs font-bold uppercase tracking-wider text-white/60">DRS</div>
-              <div class="text-[11px] text-white/40" id="drsStatusText">Closed — max downforce</div>
-            </div>
-            <div class="switch" id="drsSwitch" role="button" tabindex="0" aria-label="Toggle DRS" onclick="toggleDRS()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDRS();}">
-              <div class="knob"></div>
-            </div>
-          </div>
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-xs font-bold uppercase tracking-wider text-white/60">🔊 Engine Audio</div>
-              <div class="text-[11px] text-white/40">Pitch follows tunnel speed</div>
-            </div>
-            <div class="switch" id="audioSwitch" role="button" tabindex="0" aria-label="Toggle engine audio" onclick="toggleAudio()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAudio();}">
-              <div class="knob"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Telemetry readouts -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-        <div class="panel !rounded-xl p-3">
-          <div class="text-[10px] uppercase tracking-wider text-white/50 font-bold">Downforce</div>
-          <div class="font-display text-xl sm:text-2xl font-700 text-[var(--accent)] stat-num"><span id="dfVal">0</span> <span class="text-xs text-white/50">kg</span></div>
-          <div class="bar-track mt-2"><div class="bar-fill" id="dfBar" style="width:0%;background:linear-gradient(90deg,var(--accent),#ff5c3c)"></div></div>
-        </div>
-        <div class="panel !rounded-xl p-3">
-          <div class="text-[10px] uppercase tracking-wider text-white/50 font-bold">Drag</div>
-          <div class="font-display text-xl sm:text-2xl font-700 text-[var(--cyan)] stat-num"><span id="dragVal">0</span> <span class="text-xs text-white/50">kg</span></div>
-          <div class="bar-track mt-2"><div class="bar-fill" id="dragBar" style="width:0%;background:linear-gradient(90deg,var(--cyan),#7afcff)"></div></div>
-        </div>
-        <div class="panel !rounded-xl p-3">
-          <div class="text-[10px] uppercase tracking-wider text-white/50 font-bold">L/D Efficiency</div>
-          <div class="font-display text-xl sm:text-2xl font-700 text-[var(--gold)] stat-num"><span id="effVal">0</span></div>
-          <div class="text-[10px] text-white/40 mt-2">Downforce ÷ Drag ratio</div>
-        </div>
-        <div class="panel !rounded-xl p-3">
-          <div class="text-[10px] uppercase tracking-wider text-white/50 font-bold">DRS Gain</div>
-          <div class="font-display text-xl sm:text-2xl font-700 stat-num"><span id="drsGainVal">+0</span> <span class="text-xs text-white/50">km/h</span></div>
-          <div class="text-[10px] text-white/40 mt-2" id="drsGainNote">Open DRS on straights</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- RIGHT: Detail panel -->
-    <aside class="sticky-panel h-fit">
-      <div class="panel p-5 flex flex-col gap-4">
-        <div class="flex flex-wrap gap-2 pb-1" id="tabRow">
-          <button class="tab-pill px-3 py-1.5 rounded-full text-xs font-bold uppercase" data-tab="frontwing" onclick="selectHotspot('frontwing')">Front Wing</button>
-          <button class="tab-pill px-3 py-1.5 rounded-full text-xs font-bold uppercase" data-tab="halo" onclick="selectHotspot('halo')">Halo</button>
-          <button class="tab-pill px-3 py-1.5 rounded-full text-xs font-bold uppercase" data-tab="sidepod" onclick="selectHotspot('sidepod')">Sidepods</button>
-          <button class="tab-pill px-3 py-1.5 rounded-full text-xs font-bold uppercase" data-tab="floor" onclick="selectHotspot('floor')">Floor</button>
-          <button class="tab-pill px-3 py-1.5 rounded-full text-xs font-bold uppercase" data-tab="rearwing" onclick="selectHotspot('rearwing')">Rear Wing</button>
-        </div>
-
-        <div id="detailContent" class="min-h-[420px]">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <p class="text-center text-white/30 text-xs mt-4">Click a glowing hotspot on the car, or use the tabs above, to inspect each component.</p>
-    </aside>
-  </main>
-
-  <footer class="text-center text-white/25 text-xs mt-10 pb-4">
-    Built as an interactive concept showroom · All specs illustrative, inspired by modern F1 ground-effect regulations.
-  </footer>
-</div>
-
-<script>
-/* ======================= DATA ======================= */
-const HOTSPOTS = {
-  frontwing: {
-    title: "Front Wing",
-    tagline: "The car's first point of contact with the air",
-    icon: "🛩️",
-    desc: "The front wing sets up airflow for the entire car. Its multiple flap elements generate local downforce over the front axle while its endplates create an 'outwash' effect, steering turbulent tyre wake away from the sensitive underfloor and sidepods.",
-    stats: [
-      {k:"Elements", v:"4 flaps"},
-      {k:"Adjustability", v:"±2° trim"},
-      {k:"Endplate Design", v:"Outwash strakes"},
-      {k:"Ride-height Sensitivity", v:"Very High"},
-    ],
-    bars: [ {label:"Downforce Contribution", value:26, color:"var(--accent)"}, {label:"Drag Contribution", value:18, color:"var(--cyan)"} ],
-    impact: "Every millimetre of front wing angle changes how air reaches the floor, sidepods and rear wing — teams treat it as the primary aero balance tool."
+/* ---------------------------------- DATA ---------------------------------- */
+const PARTS = {
+  front: {
+    id: 'front',
+    label: 'Front Wing',
+    sub: 'Downforce Generator',
+    color: '#22d3ee',
+    rgb: '34,211,238',
+    icon: Wind,
+    desc: 'Multi-element sculpted wing that conditions all downstream airflow. First contact point with the air — generates ~32% of total downforce and shapes the Y250 vortex.',
+    share: 0.32,
+    hotspot: { left: '11%', top: '78%' },
+    stats: [['Element Count', '4 + Endplates'], ['Y250 Vortex', 'Stable'], ['Pitch Sensitivity', 'High']],
   },
-  halo: {
-    title: "Halo & Cockpit",
-    tagline: "Titanium armour shaped to stay out of the airflow's way",
-    icon: "🛡️",
-    desc: "A single piece of Grade-5 titanium designed purely for driver protection, capable of withstanding loads over 12 tonnes. Aerodynamically it's a necessary evil — engineers fair the structure and cockpit surround to minimise drag and keep clean air feeding the engine's airbox intake just above it.",
-    stats: [
-      {k:"Material", v:"Grade-5 Titanium"},
-      {k:"Weight", v:"≈ 7 kg"},
-      {k:"FIA Static Load Test", v:"12,000+ kg"},
-      {k:"Primary Role", v:"Driver Safety"},
-    ],
-    bars: [ {label:"Downforce Contribution", value:4, color:"var(--accent)"}, {label:"Drag Contribution", value:9, color:"var(--cyan)"} ],
-    impact: "Introduced in 2018, the halo has saved lives in multiple incidents. Modern bodywork blends into it to recover some of the drag it costs."
+  sidepods: {
+    id: 'sidepods',
+    label: 'Sidepods',
+    sub: 'Cooling / Venturi Tunnels',
+    color: '#60a5fa',
+    rgb: '96,165,250',
+    icon: Thermometer,
+    desc: 'Deep-undercut inlets feed the radiators while the underfloor Venturi tunnels accelerate air to generate ground-effect suction — the largest single downforce source.',
+    share: 0.40,
+    hotspot: { left: '57%', top: '71%' },
+    stats: [['Inlet Type', 'Deep Undercut'], ['Radiator ΔT', '+2.1 °C'], ['Venturi Peak', '1.8 g Suction']],
   },
-  sidepod: {
-    title: "Sidepods",
-    tagline: "Cooling architecture that doubles as an aero weapon",
-    icon: "🌬️",
-    desc: "Sidepods house the radiators that cool the power unit and hybrid systems. Their external shape — the 'undercut' — is sculpted to accelerate air down and around towards the floor and diffuser, boosting rear downforce without adding drag-heavy wing surfaces.",
-    stats: [
-      {k:"Function", v:"PU & ERS cooling"},
-      {k:"Design Era", v:"2022+ slim regs"},
-      {k:"Undercut Angle", v:"Aggressive"},
-      {k:"Cooling Efficiency", v:"High"},
-    ],
-    bars: [ {label:"Downforce Contribution (indirect)", value:12, color:"var(--accent)"}, {label:"Drag Contribution", value:22, color:"var(--cyan)"} ],
-    impact: "A tightly packaged sidepod lets more energised air reach the diffuser — a key differentiator between teams on the grid."
-  },
-  floor: {
-    title: "Floor & Diffuser",
-    tagline: "The single biggest source of downforce on the car",
-    icon: "🌀",
-    desc: "Underneath the car, sculpted venturi tunnels accelerate air to very high speed, creating a pressure difference that sucks the car to the track — ground effect. At the rear, the diffuser expands the airflow to recover pressure and stability, generating enormous downforce for minimal drag penalty.",
-    stats: [
-      {k:"Venturi Tunnels", v:"2 (twin-tunnel floor)"},
-      {k:"Ride-height Sensitivity", v:"Extreme"},
-      {k:"Failure Mode", v:"Porpoising if too low"},
-      {k:"Efficiency", v:"Best on car"},
-    ],
-    bars: [ {label:"Downforce Contribution", value:48, color:"var(--accent)"}, {label:"Drag Contribution", value:20, color:"var(--cyan)"} ],
-    impact: "Ground-effect floors returned in 2022, shifting the majority of downforce generation from wings back to the underbody — closer racing, cleaner air."
-  },
-  rearwing: {
-    title: "Rear Wing / DRS",
-    tagline: "The final surface — and the overtaking button",
-    icon: "🏁",
-    desc: "The rear wing balances the front wing's downforce and stabilises the rear axle under braking and in high-speed corners. The Drag Reduction System opens a flap in the mainplane on approved straights, cutting drag drastically to boost top speed for overtaking.",
-    stats: [
-      {k:"Downforce Contribution", v:"≈ 22%"},
-      {k:"DRS Flap Gap", v:"Up to 85 mm"},
-      {k:"Top-speed Gain w/ DRS", v:"+10–15 km/h"},
-      {k:"Mount Style", v:"Swan-neck pylons"},
-    ],
-    bars: [ {label:"Downforce Contribution", value:22, color:"var(--accent)"}, {label:"Drag Contribution (closed)", value:31, color:"var(--cyan)"} ],
-    impact: "With DRS open, the wing's stalled flap slashes drag by roughly a third, letting the car carry extra straight-line speed for a pass into the next braking zone."
+  rear: {
+    id: 'rear',
+    label: 'Rear Wing & DRS',
+    sub: 'Drag Reduction System',
+    color: '#f87171',
+    rgb: '248,113,113',
+    icon: Zap,
+    desc: 'High-downforce mainplane with a hydraulically actuated flap. Opening DRS flattens the flap, slashing drag by ~30% for overtaking at the cost of rear stability.',
+    share: 0.28,
+    hotspot: { left: '88%', top: '38%' },
+    stats: [['Mainplane', 'High-DF Spec'], ['DRS Delta', '−30% Drag'], ['Beam Wing', 'Active']],
   },
 };
 
-let currentHotspot = null;
-let drsOpen = false;
-let audioOn = false;
-let speed = 180;
+/* --------------------------------- SWITCH --------------------------------- */
+const Switch = ({ on, onClick, color = '#22d3ee' }) => (
+  <button
+    onClick={onClick}
+    className="relative h-5 w-9 shrink-0 rounded-full border border-white/15 transition-colors duration-300"
+    style={{ background: on ? `${color}2e` : 'rgba(255,255,255,0.05)' }}
+  >
+    <span
+      className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-all duration-300"
+      style={{
+        left: on ? 'calc(100% - 17px)' : '3px',
+        background: on ? color : '#475569',
+        boxShadow: on ? `0 0 10px ${color}` : 'none',
+      }}
+    />
+  </button>
+);
 
-/* ======================= HOTSPOT SELECT ======================= */
-function selectHotspot(id){
-  currentHotspot = id;
+/* --------------------------------- MAIN ----------------------------------- */
+export default function Formula1AeroShowroom() {
+  const [activePart, setActivePart] = useState('front');
+  const [velocity, setVelocity] = useState(220);
+  const [drsOpen, setDrsOpen] = useState(false);
+  const [showAirflow, setShowAirflow] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [elapsed, setElapsed] = useState(0);
 
-  document.querySelectorAll('.hotspot').forEach(h => h.classList.remove('is-active'));
-  const hEl = document.getElementById('hs-' + id);
-  if(hEl) hEl.classList.add('is-active');
+  const canvasRef = useRef(null);
+  const partRef = useRef(activePart);
+  const velRef = useRef(velocity);
+  const drsRef = useRef(drsOpen);
+  /* --------------------------- REFS & SESSION CLOCK --------------------------- */
+  useEffect(() => { partRef.current = activePart; }, [activePart]);
+  useEffect(() => { velRef.current = velocity; }, [velocity]);
+  useEffect(() => { drsRef.current = drsOpen; }, [drsOpen]);
 
-  document.querySelectorAll('.flow-group').forEach(g => g.classList.remove('active'));
-  const fg = document.getElementById('flow-' + id);
-  if(fg) fg.classList.add('active');
+  const airflowRef = useRef(showAirflow);
+  const gridRef = useRef(showGrid);
+  useEffect(() => { airflowRef.current = showAirflow; }, [showAirflow]);
+  useEffect(() => { gridRef.current = showGrid; }, [showGrid]);
 
-  document.querySelectorAll('.tab-pill').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
 
-  renderDetail(id);
-}
+  /* --------------------------- AIRFLOW CANVAS ENGINE --------------------------- */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let raf, w = 0, h = 0;
 
-function hsKey(e, id){
-  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); selectHotspot(id); }
-}
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = canvas.clientWidth;
+      h = canvas.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
 
-function renderDetail(id){
-  const d = HOTSPOTS[id];
-  const el = document.getElementById('detailContent');
-  const barsHtml = d.bars.map(b => `
-    <div class="mb-3">
-      <div class="flex justify-between text-xs mb-1">
-        <span class="text-white/60 font-semibold">${b.label}</span>
-        <span class="font-display font-700" style="color:${b.color}">${b.value}%</span>
+    // Particle stream
+    const COUNT = 150;
+    const P = Array.from({ length: COUNT }, () => ({
+      x: Math.random() * 1600,
+      baseY: Math.random(),
+      speed: 1 + Math.random() * 1.6,
+      len: 18 + Math.random() * 26,
+      a: 0.22 + Math.random() * 0.5,
+    }));
+
+    const gauss = (x, c, s) => Math.exp(-((x - c) * (x - c)) / (2 * s * s));
+
+    // Streamline deflection field (normalized coords), tuned to the SVG car below
+    const flowOffset = (nx, ny, part, drs) => {
+      let o = 0;
+      if (part === 'front') {
+        // Airflow curves sharply downward under the nose (nose at nx ≈ 0.17)
+        if (ny > 0.55) o += gauss(nx, 0.17, 0.09) * 0.24 * (ny - 0.35);
+        else o -= gauss(nx, 0.15, 0.07) * 0.05 * (0.62 - ny);
+      } else if (part === 'sidepods') {
+        // Streamlines split & hug the sidepod contour (nx ≈ 0.47–0.68)
+        const amp = gauss(nx, 0.56, 0.12) * 0.20;
+        o += ny >= 0.52 ? amp * (ny - 0.30) : -amp * (0.74 - ny);
+      } else {
+        // Sweep up & over the rear wing; DRS flattens the angle
+        const amp = drs ? 0.05 : 0.17;
+        o -= gauss(nx, 0.87, 0.09) * amp * (1.15 - ny);
+        if (!drs) o += gauss(nx, 0.79, 0.06) * 0.07 * Math.max(0, ny - 0.5); // diffuser kick
+      }
+      return o;
+    };
+
+    const colors = { front: '34,211,238', sidepods: '96,165,250', rear: '248,113,113' };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+
+      // HUD grid
+      if (gridRef.current) {
+        ctx.strokeStyle = 'rgba(148,163,184,0.07)';
+        ctx.lineWidth = 1;
+        for (let gx = 0; gx <= w; gx += w / 12) {
+          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+        }
+        for (let gy = 0; gy <= h; gy += h / 8) {
+          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+        }
+      }
+
+      if (airflowRef.current) {
+        const part = partRef.current;
+        const drs = drsRef.current;
+        const vf = 0.4 + (velRef.current / 350) * 3.4; // velocity drives particle speed
+        const col = colors[part];
+        ctx.lineWidth = 1.2;
+
+        for (const p of P) {
+          p.x += p.speed * vf;
+          if (p.x > w + 40) { p.x = -40; p.baseY = Math.random(); }
+
+          const y1 = p.baseY * h + flowOffset(p.x / w, p.baseY, part, drs) * h;
+          const x2 = p.x - p.len * (0.6 + vf * 0.28);
+          const y2 = p.baseY * h + flowOffset(x2 / w, p.baseY, part, drs) * h;
+
+          const grad = ctx.createLinearGradient(x2, y2, p.x, y1);
+          grad.addColorStop(0, `rgba(${col},0)`);
+          grad.addColorStop(1, `rgba(${col},${p.a})`);
+          ctx.strokeStyle = grad;
+          ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(p.x, y1); ctx.stroke();
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }, []);
+
+  /* ------------------------------ TELEMETRY MATH ------------------------------ */
+  const part = PARTS[activePart];
+  const vFactor = Math.pow(velocity / 100, 2);
+  const totalDownforce = Math.round(1450 * vFactor);
+  const partDownforce = Math.round(totalDownforce * part.share);
+  const dragForce = Math.round(430 * vFactor * (drsOpen ? 0.7 : 1));
+  const cdValue = drsOpen ? 0.648 : 0.925;
+  const topSpeed = Math.round(336 + velocity * 0.03 + (drsOpen ? 22 : 0));
+  const balanceMap = { front: 46.2, sidepods: 41.0, rear: 36.8 };
+  const balFront = Math.min(50, balanceMap[activePart] + (velocity / 350) * 1.2);
+  const balRear = 100 - balFront;
+
+  /* --------------------------------- HELPERS --------------------------------- */
+  const panel = 'rounded-xl border border-white/10 bg-white/5 backdrop-blur-md';
+  const strokeFor = (id) => (activePart === id ? PARTS[id].color : 'rgba(148,163,184,0.45)');
+  const glowFor = (id) =>
+    activePart === id ? { filter: `drop-shadow(0 0 7px ${PARTS[id].color})` } : {};
+
+  return (
+    <div className="min-h-screen bg-neutral-950 font-sans text-slate-200 selection:bg-cyan-500/30">
+      <style>{`
+        .bg-grid-hud {
+          background-image:
+            linear-gradient(rgba(148,163,184,0.045) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(148,163,184,0.045) 1px, transparent 1px);
+          background-size: 44px 44px;
+        }
+        @keyframes dashmove { to { stroke-dashoffset: -48; } }
+        .flow-dash { animation: dashmove 1.4s linear infinite; }
+        input[type='range'].hud-range {
+          -webkit-appearance: none; appearance: none;
+          height: 4px; border-radius: 9999px; outline: none; cursor: pointer;
+        }
+        input[type='range'].hud-range::-webkit-slider-thumb {
+          -webkit-appearance: none; width: 16px; height: 16px; border-radius: 9999px;
+          background: #22d3ee; border: 2px solid #0e7490;
+          box-shadow: 0 0 12px rgba(34,211,238,0.9); cursor: pointer;
+        }
+        input[type='range'].hud-range::-moz-range-thumb {
+          width: 16px; height: 16px; border-radius: 9999px;
+          background: #22d3ee; border: 2px solid #0e7490;
+          box-shadow: 0 0 12px rgba(34,211,238,0.9); cursor: pointer;
+        }
+      `}</style>
+
+      {/* Backdrop glow */}
+      <div className="pointer-events-none fixed inset-0 bg-grid-hud" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(34,211,238,0.07),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(239,68,68,0.06),transparent_50%)]" />
+
+      <div className="relative mx-auto max-w-[1600px]">
+        {/* --------------------------------- HEADER --------------------------------- */}
+        <header className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3 lg:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/40 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.35)]">
+              <Zap className="h-5 w-5 text-red-400" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold tracking-[0.22em] text-white sm:text-base">
+                FORMULA 1 <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.7)]">AERO &amp; SPEC</span> SHOWROOM
+              </h1>
+              <p className="font-mono text-[10px] tracking-[0.3em] text-slate-500">WIND TUNNEL // VIRTUAL PIT WALL</p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 lg:flex">
+            {['AERO MAP', 'TELEMETRY', 'DRS SYSTEM'].map((t) => (
+              <span key={t} className="rounded-md border border-white/10 bg-white/5 px-3 py-1 font-mono text-[10px] tracking-widest text-slate-400">{t}</span>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] tracking-widest text-red-300">
+              <Radio className="h-3.5 w-3.5 animate-pulse" /> LIVE
+            </span>
+            <span className="hidden items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[10px] tracking-widest text-cyan-300 sm:flex">
+              <Timer className="h-3.5 w-3.5" /> {mm}:{ss}
+            </span>
+          </div>
+        </header>
+
+        {/* ------------------------------ MAIN DASHBOARD ------------------------------ */}
+        <main className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[290px_minmax(0,1fr)_310px] lg:p-6">
+
+          {/* ============================ LEFT: TELEMETRY ============================ */}
+          <section className="order-2 flex flex-col gap-4 lg:order-1">
+            {/* Velocity readout */}
+            <div className={`${panel} p-4 shadow-[0_0_15px_rgba(59,130,246,0.15)]`}>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-slate-500">
+                  <Activity className="h-3.5 w-3.5 text-cyan-400" /> LIVE TELEMETRY
+                </span>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
+              </div>
+              <div className="mt-3 flex items-end gap-2">
+                <span className="font-mono text-5xl font-bold leading-none text-cyan-300 drop-shadow-[0_0_12px_rgba(34,211,238,0.6)]">
+                  {velocity}
+                </span>
+                <span className="pb-1 font-mono text-xs tracking-widest text-slate-500">KM/H</span>
+              </div>
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.7)] transition-all duration-300"
+                  style={{ width: `${(velocity / 350) * 100}%` }}
+                />
+              </div>
+              <div className="mt-1 flex justify-between font-mono text-[9px] text-slate-600">
+                <span>0</span><span>WIND SPEED</span><span>350</span>
+              </div>
+            </div>
+
+            {/* Stat tiles */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { icon: ChevronsDown, label: 'DOWNFORCE', value: `${totalDownforce.toLocaleString()}`, unit: 'N', color: 'text-cyan-300' },
+                { icon: Wind, label: 'DRAG FORCE', value: `${dragForce.toLocaleString()}`, unit: 'N', color: drsOpen ? 'text-red-300' : 'text-slate-200' },
+                { icon: MoveHorizontal, label: 'DRAG COEFF', value: cdValue.toFixed(3), unit: 'Cd', color: drsOpen ? 'text-red-300' : 'text-slate-200' },
+                { icon: Timer, label: 'EST. TOP SPD', value: `${topSpeed}`, unit: 'KM/H', color: 'text-blue-300' },
+              ].map((t) => (
+                <div key={t.label} className={`${panel} p-3`}>
+                  <div className="flex items-center gap-1.5 font-mono text-[9px] tracking-widest text-slate-500">
+                    <t.icon className="h-3 w-3 text-slate-400" /> {t.label}
+                  </div>
+                  <div className={`mt-1.5 font-mono text-lg font-semibold ${t.color}`}>
+                    {t.value} <span className="text-[10px] font-normal text-slate-500">{t.unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Aero balance */}
+            <div className={`${panel} p-4`}>
+              <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-slate-500">
+                <Layers className="h-3.5 w-3.5 text-blue-400" /> AERO BALANCE
+              </div>
+              <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full border border-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-500 to-blue-400 shadow-[0_0_10px_rgba(34,211,238,0.6)] transition-all duration-500"
+                  style={{ width: `${balFront}%` }}
+                />
+                <div className="h-full flex-1 bg-gradient-to-r from-red-500/80 to-red-400/60 transition-all duration-500" />
+              </div>
+              <div className="mt-2 flex justify-between font-mono text-[10px]">
+                <span className="text-cyan-300">F {balFront.toFixed(1)}%</span>
+                <span className="text-slate-600">FRONT / REAR</span>
+                <span className="text-red-300">R {balRear.toFixed(1)}%</span>
+              </div>
+            </div>
+
+            {/* Active aero data */}
+            <div
+              className={`${panel} p-4 transition-all duration-300`}
+              style={{ borderColor: `${part.color}55`, boxShadow: `0 0 20px ${part.color}22` }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border"
+                  style={{ borderColor: `${part.color}66`, background: `${part.color}14`, boxShadow: `0 0 12px ${part.color}44` }}
+                >
+                  <part.icon className="h-4.5 w-4.5 h-5 w-5" style={{ color: part.color }} />
+                </div>
+                <div>
+                  <div className="text-sm font-bold tracking-wider text-white">{part.label}</div>
+                  <div className="font-mono text-[9px] tracking-[0.2em]" style={{ color: part.color }}>{part.sub.toUpperCase()}</div>
+                </div>
+              </div>
+              <p className="mt-3 text-[11px] leading-relaxed text-slate-400">{part.desc}</p>
+              <div className="mt-3 flex items-center justify-between rounded-md border border-white/10 bg-black/30 px-3 py-2">
+                <span className="font-mono text-[9px] tracking-widest text-slate-500">CONTRIBUTION</span>
+                <span className="font-mono text-sm font-bold" style={{ color: part.color, textShadow: `0 0 10px ${part.color}88` }}>
+                  {partDownforce.toLocaleString()} N <span className="text-[10px] text-slate-500">({Math.round(part.share * 100)}%)</span>
+                </span>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {part.stats.map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between font-mono text-[10px]">
+                    <span className="tracking-widest text-slate-500">{k.toUpperCase()}</span>
+                    <span className="text-slate-300">{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ============================ CENTER: CAR ============================ */}
+          <section className={`${panel} relative order-1 min-h-[440px] overflow-hidden shadow-[0_0_40px_rgba(34,211,238,0.08)] lg:order-2 lg:min-h-[600px]`}>
+            {/* Canvas airflow (behind wireframe) */}
+            <canvas ref={canvasRef} className="absolute inset-0 z-0 h-full w-full" />
+
+            {/* HUD corner brackets */}
+            {['top-2 left-2 border-t-2 border-l-2', 'top-2 right-2 border-t-2 border-r-2', 'bottom-2 left-2 border-b-2 border-l-2', 'bottom-2 right-2 border-b-2 border-r-2'].map((c) => (
+              <div key={c} className={`pointer-events-none absolute z-30 h-5 w-5 border-cyan-400/50 ${c}`} />
+            ))}
+
+            {/* Top overlay bar */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 py-3">
+              <span className="font-mono text-[10px] tracking-[0.3em] text-slate-500">AERO MAP // SIDE PROFILE</span>
+              <span className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em]" style={{ color: part.color }}>
+                <Crosshair className="h-3.5 w-3.5" /> TARGET: {part.label.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Bottom overlay readout */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex items-center justify-between px-5 py-3 font-mono text-[9px] tracking-[0.2em] text-slate-600">
+              <span>FLOW: <span className="text-cyan-500">LAMINAR</span></span>
+              <span>Re {(velocity * 3.2).toFixed(1)} × 10⁵</span>
+              <span>DRS: <span className={drsOpen ? 'text-red-400' : 'text-slate-500'}>{drsOpen ? 'OPEN' : 'CLOSED'}</span></span>
+            </div>
+
+            {/* ------------------------------ F1 CAR SVG ------------------------------ */}
+            <svg viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 z-10 h-full w-full">
+              {/* Ground line */}
+              <line x1="20" y1="290" x2="880" y2="290" stroke="rgba(148,163,184,0.25)" strokeWidth="1" strokeDasharray="8 6" />
+
+              {/* ===== NEUTRAL CHASSIS ===== */}
+              <g fill="none" stroke="rgba(226,232,240,0.55)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+                {/* Wheels */}
+                <circle cx="215" cy="248" r="40" />
+                <circle cx="215" cy="248" r="22" strokeDasharray="4 4" opacity="0.5" />
+                <circle cx="215" cy="248" r="5" />
+                <circle cx="695" cy="248" r="42" />
+                <circle cx="695" cy="248" r="23" strokeDasharray="4 4" opacity="0.5" />
+                <circle cx="695" cy="248" r="5" />
+                {/* Nose cone */}
+                <path d="M150,258 L340,196" />
+                <path d="M162,266 L345,212" />
+                {/* Monocoque / cockpit */}
+                <path d="M340,196 L470,186 L560,208 L575,238 L360,238 L345,212 Z" />
+                <path d="M398,196 Q430,180 466,192" opacity="0.7" />
+                {/* Halo */}
+                <path d="M385,200 Q425,156 470,196" strokeWidth="5" />
+                <line x1="430" y1="176" x2="432" y2="196" strokeWidth="4" />
+                {/* Engine cover / shark fin */}
+                <path d="M470,186 L668,128 L688,206 L560,208 Z" />
+                <ellipse cx="492" cy="176" rx="18" ry="10" />
+                {/* Floor + diffuser */}
+                <path d="M165,274 L640,274" />
+                <path d="M640,274 L706,240" />
+                <path d="M655,274 L700,248" opacity="0.6" />
+                <path d="M670,274 L704,256" opacity="0.6" />
+                {/* Suspension */}
+                <path d="M330,220 L215,240" opacity="0.7" />
+                <path d="M335,232 L218,256" opacity="0.7" />
+                <path d="M600,225 L695,244" opacity="0.7" />
+                <path d="M605,238 L692,258" opacity="0.7" />
+                {/* Wing mirrors */}
+                <path d="M368,192 L356,182" />
+                <circle cx="354" cy="180" r="3" />
+              </g>
+
+              {/* ===== FRONT WING (hotspot 1) ===== */}
+              <g
+                fill="none"
+                stroke={strokeFor('front')}
+                strokeWidth={activePart === 'front' ? 2.6 : 2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                style={{ ...glowFor('front'), transition: 'all .3s' }}
+              >
+                <polygon points="48,270 170,263 158,242 58,249" />
+                <path d="M60,254 L156,247" />
+                <path d="M64,260 L160,253" opacity="0.6" />
+                <polygon points="36,238 54,236 58,274 38,274" />
+                <path d="M100,246 L104,266" opacity="0.5" />
+                <path d="M130,244 L134,264" opacity="0.5" />
+                {activePart === 'front' && (
+                  <path className="flow-dash" d="M20,232 Q90,236 150,252" strokeDasharray="6 6" opacity="0.8" />
+                )}
+              </g>
+
+              {/* ===== SIDEPODS (hotspot 2) ===== */}
+              <g
+                fill="none"
+                stroke={strokeFor('sidepods')}
+                strokeWidth={activePart === 'sidepods' ? 2.6 : 2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                style={{ ...glowFor('sidepods'), transition: 'all .3s' }}
+              >
+                <polygon points="425,216 560,206 614,224 606,256 438,258 422,236" />
+                <polygon points="428,216 470,211 470,233 428,235" opacity="0.85" />
+                <path d="M580,222 L576,250" opacity="0.6" />
+                <path d="M590,224 L586,251" opacity="0.6" />
+                <path d="M600,227 L596,252" opacity="0.6" />
+                <path d="M440,264 L520,264" opacity="0.8" />
+                <path d="M455,264 L450,272" opacity="0.5" />
+                <path d="M495,264 L492,272" opacity="0.5" />
+                {activePart === 'sidepods' && (
+                  <path className="flow-dash" d="M380,240 Q500,200 620,240" strokeDasharray="6 6" opacity="0.8" />
+                )}
+              </g>
+
+              {/* ===== REAR WING & DRS (hotspot 3) ===== */}
+              <g
+                fill="none"
+                stroke={strokeFor('rear')}
+                strokeWidth={activePart === 'rear' ? 2.6 : 2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                style={{ ...glowFor('rear'), transition: 'all .3s' }}
+              >
+                <polygon points="726,100 852,88 856,178 730,186" />
+                <polygon points="740,150 846,142 848,156 742,164" />
+                {/* DRS flap: rotates flat when open */}
+                {drsOpen ? (
+                  <polygon points="736,124 850,118 850,128 737,134" stroke="#f87171" style={{ filter: 'drop-shadow(0 0 8px #f87171)' }} />
+                ) : (
+                  <polygon points="736,112 848,102 850,118 738,128" />
+                )}
+                <rect x="786" y="108" width="10" height="8" opacity="0.8" />
+                <polygon points="742,196 828,190 830,200 744,206" opacity="0.85" />
+                <path d="M688,206 L740,160" opacity="0.6" />
+                {drsOpen && (
+                  <text x="742" y="76" fontFamily="monospace" fontSize="13" fill="#f87171" style={{ filter: 'drop-shadow(0 0 6px #f87171)' }}>
+                    DRS OPEN
+                  </text>
+                )}
+                {activePart === 'rear' && (
+                  <path
+                    className="flow-dash"
+                    d={drsOpen ? 'M700,120 Q790,110 880,116' : 'M700,150 Q790,90 880,70'}
+                    strokeDasharray="6 6"
+                    opacity="0.8"
+                  />
+                )}
+              </g>
+            </svg>
+
+            {/* ------------------------------ HOTSPOTS ------------------------------ */}
+            {Object.values(PARTS).map((p) => {
+              const isActive = activePart === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setActivePart(p.id)}
+                  className="absolute z-20 -translate-x-1/2 -translate-y-1/2 outline-none"
+                  style={{ left: p.hotspot.left, top: p.hotspot.top }}
+                  aria-label={p.label}
+                >
+                  <span className="relative flex h-7 w-7 items-center justify-center">
+                    {isActive && (
+                      <span
+                        className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-40"
+                        style={{ background: p.color }}
+                      />
+                    )}
+                    <span
+                      className="absolute inline-flex h-6 w-6 rounded-full border-2 transition-all duration-300"
+                      style={{
+                        borderColor: isActive ? p.color : 'rgba(148,163,184,0.5)',
+                        boxShadow: isActive ? `0 0 14px ${p.color}` : 'none',
+                        background: isActive ? `${p.color}22` : 'rgba(0,0,0,0.4)',
+                      }}
+                    />
+                    <span
+                      className="relative inline-flex h-2 w-2 rounded-full"
+                      style={{ background: isActive ? p.color : '#94a3b8', boxShadow: isActive ? `0 0 8px ${p.color}` : 'none' }}
+                    />
+                  </span>
+                  <span
+                    className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tracking-[0.2em] transition-colors"
+                    style={{ color: isActive ? p.color : 'rgba(148,163,184,0.6)' }}
+                  >
+                    {p.label.toUpperCase()}
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* Scanline sweep */}
+            <div className="pointer-events-none absolute inset-0 z-30 bg-[linear-gradient(transparent_0%,rgba(34,211,238,0.03)_50%,transparent_100%)] bg-[length:100%_200%]" />
+          </section>
+
+          {/* ============================ RIGHT: CONTROLS ============================ */}
+          <section className="order-3 flex flex-col gap-4">
+            {/* Wind tunnel slider */}
+            <div className={`${panel} p-4 shadow-[0_0_15px_rgba(59,130,246,0.15)]`}>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-slate-500">
+                  <Gauge className="h-3.5 w-3.5 text-cyan-400" /> WIND-TUNNEL VELOCITY
+                </span>
+                <span className="font-mono text-sm font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]">
+                  {velocity} <span className="text-[9px] text-slate-500">KM/H</span>
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="350"
+                step="5"
+                value={velocity}
+                onChange={(e) => setVelocity(Number(e.target.value))}
+                className="hud-range mt-4 w-full"
+                style={{
+                  background: `linear-gradient(90deg, #0ea5e9 0%, #22d3ee ${(velocity / 350) * 100}%, rgba(255,255,255,0.1) ${(velocity / 350) * 100}%)`,
+                }}
+              />
+              <div className="mt-2 flex justify-between font-mono text-[9px] text-slate-600">
+                <span>0</span><span>87</span><span>175</span><span>262</span><span>350</span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-1.5">
+                {[150, 220, 300].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setVelocity(v)}
+                    className={`rounded-md border py-1 font-mono text-[10px] tracking-wider transition-all ${
+                      velocity === v
+                        ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.3)]'
+                        : 'border-white/10 bg-white/5 text-slate-400 hover:border-cyan-400/30 hover:text-cyan-200'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* DRS toggle */}
+            <button
+              onClick={() => setDrsOpen((o) => !o)}
+              className={`${panel} group flex w-full items-center justify-between p-4 transition-all duration-300 ${
+                drsOpen
+                  ? 'border-red-500/50 shadow-[0_0_25px_rgba(239,68,68,0.3)]'
+                  : 'hover:border-red-500/30'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-all duration-300 ${
+                    drsOpen
+                      ? 'border-red-400/60 bg-red-500/15 shadow-[0_0_14px_rgba(239,68,68,0.5)]'
+                      : 'border-white/15 bg-white/5'
+                  }`}
+                >
+                  <Power className={`h-5 w-5 transition-colors ${drsOpen ? 'text-red-400' : 'text-slate-400'}`} />
+                </div>
+                <div className="text-left">
+                  <div className={`text-sm font-bold tracking-wider ${drsOpen ? 'text-red-300' : 'text-slate-200'}`}>
+                    DRS {drsOpen ? 'OPEN' : 'CLOSED'}
+                  </div>
+                  <div className="font-mono text-[9px] tracking-[0.2em] text-slate-500">
+                    DRAG REDUCTION SYSTEM — REAR FLAP
+                  </div>
+                </div>
+              </div>
+              <span
+                className={`rounded-md border px-2 py-1 font-mono text-[10px] font-bold tracking-wider ${
+                  drsOpen ? 'border-red-400/50 bg-red-500/10 text-red-300' : 'border-white/10 text-slate-500'
+                }`}
+              >
+                {drsOpen ? '−30% DRAG' : 'STANDBY'}
+              </span>
+            </button>
+
+            {/* Aero telemetry toggles */}
+            <div className={`${panel} p-4`}>
+              <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-slate-500">
+                <ScanLine className="h-3.5 w-3.5 text-blue-400" /> AERO TELEMETRY TOGGLES
+              </div>
+              <div className="mt-3 space-y-3">
+                {[
+                  { icon: Wind, label: 'Airflow Particles', sub: 'Canvas streamline render', on: showAirflow, fn: () => setShowAirflow((s) => !s), color: '#22d3ee' },
+                  { icon: Layers, label: 'HUD Grid Overlay', sub: 'Reference flow field grid', on: showGrid, fn: () => setShowGrid((s) => !s), color: '#60a5fa' },
+                ].map((t) => (
+                  <div key={t.label} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <t.icon className="h-4 w-4 text-slate-400" />
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">{t.label}</div>
+                        <div className="font-mono text-[8px] tracking-widest text-slate-600">{t.sub.toUpperCase()}</div>
+                      </div>
+                    </div>
+                    <Switch on={t.on} onClick={t.fn} color={t.color} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Hotspot selector */}
+            <div className={`${panel} p-4`}>
+              <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-slate-500">
+                <Crosshair className="h-3.5 w-3.5 text-red-400" /> COMPONENT SELECTOR
+              </div>
+              <div className="mt-3 space-y-2">
+                {Object.values(PARTS).map((p) => {
+                  const isActive = activePart === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setActivePart(p.id)}
+                      className="flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-all duration-300"
+                      style={{
+                        borderColor: isActive ? `${p.color}66` : 'rgba(255,255,255,0.1)',
+                        background: isActive ? `${p.color}12` : 'rgba(255,255,255,0.03)',
+                        boxShadow: isActive ? `0 0 15px ${p.color}33` : 'none',
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <CircleDot
+                          className="h-4 w-4 transition-colors"
+                          style={{ color: isActive ? p.color : '#475569' }}
+                        />
+                        <div>
+                          <div className="text-xs font-bold tracking-wider" style={{ color: isActive ? '#fff' : '#cbd5e1' }}>
+                            {p.label}
+                          </div>
+                          <div className="font-mono text-[8px] tracking-[0.2em] text-slate-500">{p.sub.toUpperCase()}</div>
+                        </div>
+                      </div>
+                      <span
+                        className="font-mono text-[9px] tracking-widest"
+                        style={{ color: isActive ? p.color : '#475569' }}
+                      >
+                        {isActive ? '● LOCKED' : '○ SELECT'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </main>
+
+        {/* --------------------------------- FOOTER --------------------------------- */}
+        <footer className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/10 px-4 py-4 font-mono text-[9px] tracking-[0.2em] text-slate-600">
+          {[
+            'PU: 1.6L V6 TURBO-HYBRID',
+            'MIN WEIGHT: 798 KG',
+            'ERS: 4 MJ / LAP',
+            'FUEL FLOW: 100 KG/H',
+            'TYRES: 18IN SLICK',
+            'GEARBOX: 8-SPD SEAMLESS',
+          ].map((s) => (
+            <span key={s} className="flex items-center gap-2">
+              <span className="h-1 w-1 rounded-full bg-cyan-500/60" /> {s}
+            </span>
+          ))}
+        </footer>
       </div>
-      <div class="bar-track"><div class="bar-fill" style="width:0%;background:${b.color}" data-target="${b.value}"></div></div>
-    </div>`).join('');
-
-  const statsHtml = d.stats.map(s => `
-    <div class="flex justify-between border-b divider py-2 text-sm">
-      <span class="text-white/50">${s.k}</span>
-      <span class="font-semibold text-white/90 text-right">${s.v}</span>
-    </div>`).join('');
-
-  el.innerHTML = `
-    <div class="fade-swap">
-      <div class="flex items-start gap-3 mb-2">
-        <div class="text-3xl leading-none">${d.icon}</div>
-        <div>
-          <h2 class="font-display font-700 text-xl uppercase tracking-tight">${d.title}</h2>
-          <p class="text-[var(--cyan)] text-xs font-semibold">${d.tagline}</p>
-        </div>
-      </div>
-      <p class="text-sm text-white/70 leading-relaxed mb-4">${d.desc}</p>
-      <div class="mb-4">${barsHtml}</div>
-      <div class="mb-4">${statsHtml}</div>
-      <div class="rounded-xl p-3 text-xs leading-relaxed" style="background:rgba(233,192,95,0.08); border:1px solid rgba(233,192,95,0.25); color:#f1dfae;">
-        <strong class="uppercase tracking-wide text-[10px] block mb-1">Performance Impact</strong>
-        ${d.impact}
-      </div>
-    </div>`;
-
-  requestAnimationFrame(() => {
-    el.querySelectorAll('.bar-fill[data-target]').forEach(b => {
-      requestAnimationFrame(() => { b.style.width = b.dataset.target + '%'; });
-    });
-  });
+    </div>
+  );
 }
-
-function renderPlaceholder(){
-  const el = document.getElementById('detailContent');
-  el.innerHTML = `
-    <div class="fade-swap h-full flex flex-col items-center justify-center text-center py-16 gap-3">
-      <div class="text-4xl">🔍</div>
-      <h2 class="font-display font-700 uppercase tracking-wide">Select a Component</h2>
-      <p class="text-sm text-white/50 max-w-xs">Click any glowing hotspot on the car — or a tab above — to reveal its aerodynamic role, specs and performance impact.</p>
-    </div>`;
-}
-
-document.getElementById('resetBtn').addEventListener('click', () => {
-  currentHotspot = null;
-  document.querySelectorAll('.hotspot').forEach(h => h.classList.remove('is-active'));
-  document.querySelectorAll('.flow-group').forEach(g => g.classList.remove('active'));
-  document.querySelectorAll('.tab-pill').forEach(t => t.classList.remove('active'));
-  renderPlaceholder();
-});
-
-renderPlaceholder();
-
-/* ======================= WIND TUNNEL / TELEMETRY ======================= */
-const speedSlider = document.getElementById('speedSlider');
-const speedVal = document.getElementById('speedVal');
-const dfVal = document.getElementById('dfVal');
-const dragVal = document.getElementById('dragVal');
-const effVal = document.getElementById('effVal');
-const dfBar = document.getElementById('dfBar');
-const dragBar = document.getElementById('dragBar');
-const drsGainVal = document.getElementById('drsGainVal');
-
-const MAX_DF = 0.021 * 350 * 350;   // reference max for bar scaling
-const MAX_DRAG = 0.0092 * 350 * 350;
-
-function calcAero(v, open){
-  let downforce = 0.021 * v * v;
-  let drag = 0.0092 * v * v;
-  if(open){ downforce *= 0.76; drag *= 0.64; }
-  return { downforce: Math.round(downforce), drag: Math.round(drag) };
-}
-
-function updateTelemetry(){
-  const { downforce, drag } = calcAero(speed, drsOpen);
-  dfVal.textContent = downforce.toLocaleString();
-  dragVal.textContent = drag.toLocaleString();
-  effVal.textContent = (downforce / Math.max(drag,1)).toFixed(1) + " : 1";
-  dfBar.style.width = Math.min(100, (downforce / MAX_DF) * 100) + '%';
-  dragBar.style.width = Math.min(100, (drag / MAX_DRAG) * 100) + '%';
-
-  const gain = drsOpen ? Math.round(6 + (speed/350) * 9) : 0;
-  drsGainVal.textContent = (drsOpen ? '+' : '+') + gain;
-  document.getElementById('drsGainNote').textContent = drsOpen ? "DRS active on straight" : "Open DRS on straights";
-
-  // Flow animation speed: higher wind tunnel speed -> faster dash flow
-  const dur = Math.max(0.55, 4.6 - (speed/350) * 4.0);
-  document.documentElement.style.setProperty('--flow-dur', dur.toFixed(2) + 's');
-
-  // Update particle motion speed (SMIL) — best-effort across browsers
-  document.querySelectorAll('animateMotion').forEach(anim => {
-    const newDur = (dur * 0.8).toFixed(2) + 's';
-    anim.setAttribute('dur', newDur);
-    try { if (typeof anim.beginElement === 'function') { /* no forced restart to avoid flicker */ } } catch(e){}
-  });
-
-  if(audioOn) updateEngineAudio();
-}
-
-speedSlider.addEventListener('input', (e) => {
-  speed = parseInt(e.target.value, 10);
-  speedVal.textContent = speed;
-  updateTelemetry();
-});
-
-function toggleDRS(){
-  drsOpen = !drsOpen;
-  document.getElementById('drsSwitch').classList.toggle('on', drsOpen);
-  document.getElementById('f1svg').classList.toggle('drs-open', drsOpen);
-  document.getElementById('drsStatusText').textContent = drsOpen ? "Open — reduced drag" : "Closed — max downforce";
-  updateTelemetry();
-}
-
-updateTelemetry();
-
-/* ======================= ENGINE AUDIO (Web Audio API) ======================= */
-let audioCtx = null, osc1 = null, osc2 = null, gainNode = null, filterNode = null;
-
-function toggleAudio(){
-  audioOn = !audioOn;
-  document.getElementById('audioSwitch').classList.toggle('on', audioOn);
-  document.getElementById('f1svg').parentElement.parentElement.classList.toggle('engine-on', audioOn);
-  if(audioOn){ startEngineAudio(); } else { stopEngineAudio(); }
-}
-
-function startEngineAudio(){
-  try{
-    if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-    if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
-
-    osc1 = audioCtx.createOscillator();
-    osc2 = audioCtx.createOscillator();
-    osc1.type = 'sawtooth';
-    osc2.type = 'square';
-    filterNode = audioCtx.createBiquadFilter();
-    filterNode.type = 'lowpass';
-    filterNode.frequency.value = 1400;
-    gainNode = audioCtx.createGain();
-    gainNode.gain.value = 0.0001;
-
-    osc1.connect(filterNode);
-    osc2.connect(filterNode);
-    filterNode.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    const freq = mapSpeedToFreq(speed);
-    osc1.frequency.value = freq;
-    osc2.frequency.value = freq * 1.5;
-
-    osc1.start();
-    osc2.start();
-    gainNode.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 0.4);
-  }catch(err){
-    console.warn('Engine audio unavailable:', err);
-  }
-}
-
-function updateEngineAudio(){
-  if(!audioCtx || !osc1 || !osc2) return;
-  const freq = mapSpeedToFreq(speed);
-  osc1.frequency.linearRampToValueAtTime(freq, audioCtx.currentTime + 0.15);
-  osc2.frequency.linearRampToValueAtTime(freq * 1.5, audioCtx.currentTime + 0.15);
-}
-
-function stopEngineAudio(){
-  if(gainNode && audioCtx){
-    gainNode.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
-  }
-  const o1 = osc1, o2 = osc2;
-  setTimeout(() => {
-    try{ o1 && o1.stop(); }catch(e){}
-    try{ o2 && o2.stop(); }catch(e){}
-  }, 280);
-  osc1 = null; osc2 = null;
-}
-
-function mapSpeedToFreq(v){
-  return 55 + (v / 350) * 260;
-}
-
-/* ======================= SPOTLIGHT MOUSE FOLLOW ======================= */
-const spotlight = document.getElementById('spotlight');
-window.addEventListener('pointermove', (e) => {
-  spotlight.style.setProperty('--mx', e.clientX + 'px');
-  spotlight.style.setProperty('--my', e.clientY + 'px');
-});
-
-/* Default: no hotspot selected initially, subtle intro pulse on front wing tab */
-</script>
-</body>
-</html>
