@@ -4,36 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Aero Showroom</title>
-
-    <!-- 1. Tailwind CSS for styling -->
+    <!-- 1. Load Tailwind CSS for the styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- 2. Import Map: This tells the browser where to find 'react' and 'lucide-react' 
-         so your original "import" lines work without a build tool. -->
-    <script type="importmap">
-    {
-        "imports": {
-            "react": "https://esm.sh/react@18",
-            "react-dom": "https://esm.sh/react-dom@18",
-            "react-dom/client": "https://esm.sh/react-dom@18/client",
-            "lucide-react": "https://esm.sh/lucide-react@0.344.0"
-        }
-    }
-    </script>
-
-    <!-- 3. Babel: This translates JSX (the HTML-like code) into standard JavaScript -->
+    <!-- 2. Load Babel to translate the JSX code in real-time -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-neutral-950">
+    <!-- This is where the App will appear -->
     <div id="root"></div>
 
-    <!-- 4. This script loads your App.jsx and renders it to the screen -->
-    <script type="text/babel" data-type="module">
-        import React from 'react';
-        import { createRoot } from 'react-dom/client';
-        import Formula1AeroShowroom from './App.jsx';
+    <!-- 3. Load your App.jsx file. 
+         The 'data-plugins="transform-modules-umd"' helps handle the imports. -->
+    <script 
+        type="text/babel" 
+        data-type="module" 
+        data-src="./App.jsx"
+        data-plugins="transform-modules-umd">
+    </script>
 
-        const root = createRoot(document.getElementById('root'));
+    <script type="text/babel">
+        // This small script triggers the render if your App.jsx 
+        // doesn't already have a render command at the bottom.
+        import Formula1AeroShowroom from './App.jsx';
+        const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<Formula1AeroShowroom />);
     </script>
 </body>
