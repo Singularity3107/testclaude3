@@ -4,30 +4,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Aero Showroom</title>
-    <!-- 1. Load Tailwind CSS for the styling -->
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 2. Load Babel to translate the JSX code in real-time -->
+    <!-- Load Babel Standalone to compile React code on the fly -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Import Map resolves your unmodified React and Lucide imports in the browser -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18",
+            "react-dom/client": "https://esm.sh/react-dom@18/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.344.0"
+        }
+    }
+    </script>
 </head>
 <body class="bg-neutral-950">
-    <!-- This is where the App will appear -->
     <div id="root"></div>
 
-    <!-- 3. Load your App.jsx file. 
-         The 'data-plugins="transform-modules-umd"' helps handle the imports. -->
-    <script 
-        type="text/babel" 
-        data-type="module" 
-        data-src="./App.jsx"
-        data-plugins="transform-modules-umd">
-    </script>
+    <script type="module">
+        import React from 'react';
+        import { createRoot } from 'react-dom/client';
 
-    <script type="text/babel">
-        // This small script triggers the render if your App.jsx 
-        // doesn't already have a render command at the bottom.
-        import Formula1AeroShowroom from './App.jsx';
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<Formula1AeroShowroom />);
+        // 1. Fetch your App.jsx file as plain text to avoid strict MIME type checks
+        fetch('./App.jsx')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to find App.jsx. Ensure the file is in the same folder as index.html.');
+                }
+                return response.text();
+            })
+            .then(jsxCode => {
+                // 2. Compile JSX into native JavaScript using Babel
+                const compiledCode = Babel.transform(jsxCode, {
+                    presets: ['react'],
+                    filename: 'App.jsx'
+                }).code;
+
+                // 3. Convert the compiled JS to a Blob with an approved MIME type
+                const blob = new Blob([compiledCode], { type: 'application/javascript' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                // 4. Dynamically import the compiled module and render it
+                import(blobUrl)
+                    .then(module => {
+                        const root = createRoot(document.getElementById('root'));
+                        // Render the default exported component (Formula1AeroShowroom)
+                        root.render(React.createElement(module.default));
+                    })
+                    .catch(err => {
+                        console.error('Error importing compiled module:', err);
+                        showError('Error executing the compiled React component. Check the browser console.');
+                    });
+            })
+            .catch(err => {
+                console.error(err);
+                showError('Could not load App.jsx. Ensure App.jsx is present in your repository alongside index.html.');
+            });
+
+        function showError(msg) {
+            document.getElementById('root').innerHTML = `
+                <div style="color: #ef4444; padding: 20px; font-family: monospace; text-align: center; margin-top: 50px;">
+                    <p style="font-weight: bold; font-size: 18px;">Application Loader Error</p>
+                    <p>${msg}</p>
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>
